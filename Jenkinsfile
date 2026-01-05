@@ -1,38 +1,48 @@
 pipeline {
-    agent {label "vinod"}
+    agent { label 'vinod' }
+
+    parameters {
+        string(name: 'IMAGE_NAME', defaultValue: 'notes-app', description: 'Docker image name')
+        string(name: 'DOCKERHUB_REPO', defaultValue: 'notes-app', description: 'Docker Hub repository')
+        string(name: 'TAG', defaultValue: 'latest', description: 'Image tag')
+    }
 
     stages {
-        stage('Code') {
+        stage('Git Clone') {
             steps {
-                echo 'Cloning code'
-                git url: "https://github.com/goldenbutter/django-notes-app.git", branch:"main"
-                echo "Code clone successful"
+                echo 'Cloning repository...'
+                git url: 'https://github.com/goldenbutter/django-notes-app.git', branch: 'main'
             }
         }
-        stage('Build') {
+
+        stage('Docker Image Build') {
             steps {
-                echo 'Build code'
-                sh "whoami"
-                sh "docker build -t notes-app:latest ."
+                echo 'Building Docker image...'
+                sh "docker build -t ${params.IMAGE_NAME}:${params.TAG} ."
             }
         }
+
         stage('Push') {
             steps {
-                echo 'Push code to docker hub'
+                echo 'Pushing image to Docker Hub...'
                 withCredentials([usernamePassword(
-                    credentialsId:"dockerHubCred",
-                    usernameVariable:"dockerHubUser", 
-                    passwordVariable:"dockerHubPass")]){
-                sh "echo $dockerHubPass | docker login -u ${env.dockerHubUser} --password-stdin"
-                sh "docker image tag notes-app:latest ${env.dockerHubUser}/notes-app:latest"
-                sh "docker push ${env.dockerHubUser}/notes-app:latest"
+                    credentialsId: 'dockerHubCred',
+                    usernameVariable: 'dockerHubUser',
+                    passwordVariable: 'dockerHubPass'
+                )]) {
+                    sh """
+                        echo "$dockerHubPass" | docker login -u "$dockerHubUser" --password-stdin
+                        docker tag ${params.IMAGE_NAME}:${params.TAG} $dockerHubUser/${params.DOCKERHUB_REPO}:${params.TAG}
+                        docker push $dockerHubUser/${params.DOCKERHUB_REPO}:${params.TAG}
+                    """
                 }
             }
         }
+
         stage('Deploy') {
             steps {
-                echo 'Deploy code'
-                sh "docker-compose up -d"
+                echo 'Deploying with Docker Compose...'
+                sh "docker compose up -d || docker-compose up -d"
             }
         }
     }
