@@ -1,3 +1,4 @@
+@Library("Shared") _
 pipeline {
     agent { label 'vinod' }
 
@@ -8,42 +9,51 @@ pipeline {
     }
 
     stages {
-        stage('Git Clone') {
+        stage('Clone') {
             steps {
-                echo 'Cloning repository...'
-                git url: 'https://github.com/goldenbutter/django-notes-app.git', branch: 'main'
+                script {
+                    echo 'Git repo Cloning.'
+                    gitClone('https://github.com/goldenbutter/django-notes-app.git','main')
+                    echo 'Git Cloning is successful.'
+                }
             }
         }
 
-        stage('Docker Image Build') {
+        stage('Build') {
             steps {
-                echo 'Building Docker image...'
+                echo 'Building Docker image.'
                 sh "docker build -t ${params.IMAGE_NAME}:${params.TAG} ."
+                    echo 'Docker Image Build is successful.'
             }
         }
 
         stage('Push') {
             steps {
-                echo 'Pushing image to Docker Hub...'
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerHubCred',
-                    usernameVariable: 'dockerHubUser',
-                    passwordVariable: 'dockerHubPass'
-                )]) {
-                    sh """
-                        echo "$dockerHubPass" | docker login -u "$dockerHubUser" --password-stdin
-                        docker tag ${params.IMAGE_NAME}:${params.TAG} $dockerHubUser/${params.DOCKERHUB_REPO}:${params.TAG}
-                        docker push $dockerHubUser/${params.DOCKERHUB_REPO}:${params.TAG}
-                    """
+                script {
+                    echo 'Pushing Docker Image to Docker Hub.'
+                    dockerPush(params.IMAGE_NAME, params.TAG, 'dockerHubCred', params.DOCKERHUB_REPO)
+                    echo 'Docker Push is successful.'
                 }
             }
         }
 
         stage('Deploy') {
-            steps {
-                echo 'Deploying with Docker Compose...'
-                sh "docker compose up -d || docker-compose up -d"
+          steps {
+            echo 'Deploying with Docker Compose.'
+            dir('django-notes-app') {
+              sh 'docker compose down --remove-orphans || docker-compose down --remove-orphans'
+              sh 'docker compose up -d --force-recreate --pull always || docker-compose up -d --force-recreate'
+              echo 'Docker Compose Deployment is successful.'
             }
+          }
+        }
+        
+        stage('Library smoke') {
+          steps {
+            script {
+              echo "Known globals: gitClone, dockerBuild, dockerPush should exist now."
+            }
+          }
         }
     }
 }
