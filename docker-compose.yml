@@ -4,3 +4,4 @@ services:
     image: "goldenbutter/notes-app:latest"
     ports: 
       - "8000:8000"
+      
